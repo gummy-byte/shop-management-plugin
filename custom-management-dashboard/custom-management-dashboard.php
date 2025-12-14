@@ -3,9 +3,9 @@
  * Plugin Name: Custom Management Dashboard
  * Description: A modern SPA dashboard for store management, replacing the standard WP Admin interface.
  * Version: 1.0.0
- * Author: Jules
- * Text Domain: custom-management-dashboard
- */
+ * Author: Syamim
+ * Author URI: https://syamim.design 
+ * */
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -21,49 +21,89 @@ define( 'CMD_URL', plugin_dir_url( __FILE__ ) );
 class Custom_Management_Dashboard {
 
 	public function __construct() {
+		// Init Hooks
+		add_action( 'init', array( $this, 'register_rewrite_rule' ) );
+		add_filter( 'query_vars', array( $this, 'register_query_var' ) );
+		add_filter( 'template_include', array( $this, 'load_app_template' ) );
+
+		// Admin Menu (Keep as shortcut)
 		add_action( 'admin_menu', array( $this, 'register_menu_page' ) );
-		add_action( 'admin_init', array( $this, 'render_fullscreen_dashboard' ) );
+		
+		// API
 		add_action( 'rest_api_init', array( $this, 'register_rest_routes' ) );
+
+		// Auto-flush rules if not set (Self-healing for dev)
+		if ( ! get_option( 'cmd_rules_flushed' ) ) {
+			add_action( 'init', function() {
+				$this->register_rewrite_rule();
+				flush_rewrite_rules();
+				update_option( 'cmd_rules_flushed', 1 );
+			}, 20 );
+		}
 	}
 
 	/**
-	 * Register the menu item.
+	 * 1. Register the URL: /management-portal
+	 */
+	public function register_rewrite_rule() {
+		add_rewrite_rule( '^management-portal/?$', 'index.php?cmd_view=1', 'top' );
+	}
+
+	/**
+	 * 2. Register the variable to track our page
+	 */
+	public function register_query_var( $vars ) {
+		$vars[] = 'cmd_view';
+		return $vars;
+	}
+
+	/**
+	 * 3. Load the App when URL is visited
+	 */
+	public function load_app_template( $template ) {
+		if ( get_query_var( 'cmd_view' ) ) {
+			// Auth Check
+			if ( ! is_user_logged_in() ) {
+				wp_safe_redirect( wp_login_url( home_url( '/management-portal' ) ) );
+				exit;
+			}
+			if ( ! current_user_can( 'manage_woocommerce' ) ) {
+				wp_die( 'You differ from the chosen one. (Insufficient Permissions)' );
+			}
+
+			// Load App
+			require_once CMD_PATH . 'includes/view-dashboard.php';
+			exit;
+		}
+		return $template;
+	}
+
+	/**
+	 * Add specific menu item to sidebar
 	 */
 	public function register_menu_page() {
 		add_menu_page(
 			__( 'Management Portal', 'custom-management-dashboard' ),
 			__( 'Management Portal', 'custom-management-dashboard' ),
-			'manage_woocommerce', // Capability required
-			'custom-management-dashboard', // Menu slug
-			array( $this, 'render_placeholder' ), // Callback (won't be used if fullscreen logic works)
+			'manage_woocommerce',
+			'custom-management-dashboard-launcher',
+			array( $this, 'render_launcher_page' ), // Redirect page
 			'dashicons-chart-area',
 			2
 		);
 	}
 
 	/**
-	 * Intercept the admin load to render the custom Full Screen app.
+	 * Redirect admin clicks to the frontend app
 	 */
-	public function render_fullscreen_dashboard() {
-		// Check if we are on our specific page
-		if ( isset( $_GET['page'] ) && 'custom-management-dashboard' === $_GET['page'] ) {
-
-			// Security Check
-			if ( ! current_user_can( 'manage_woocommerce' ) ) {
-				wp_die( __( 'You do not have sufficient permissions to access this page.', 'custom-management-dashboard' ) );
-			}
-
-			// Load the custom template
-			require_once CMD_PATH . 'includes/view-dashboard.php';
-			exit; // Stop standard WP Admin rendering
-		}
-	}
-
-	/**
-	 * Placeholder for the menu registration.
-	 */
-	public function render_placeholder() {
-		echo '<div id="cmd-root"></div>';
+	public function render_launcher_page() {
+		?>
+		<div class="wrap">
+			<h1>Launching Portal...</h1>
+			<p>If you are not redirected, <a href="<?php echo home_url('/management-portal'); ?>">click here</a>.</p>
+			<script>window.location.href = "<?php echo home_url('/management-portal'); ?>";</script>
+		</div>
+		<?php
 	}
 
 	/**

@@ -1,22 +1,49 @@
 import React, { useEffect, useState } from 'react';
+import { Table, Input, Button, message, Space, Avatar, Typography } from 'antd';
+import { SaveOutlined } from '@ant-design/icons';
 import api from '../utils/api';
+
+const { Title } = Typography;
 
 const InventoryManager = () => {
     const [ products, setProducts ] = useState([]);
     const [ edited, setEdited ] = useState({});
     const [ loading, setLoading ] = useState(true);
+    const [ pagination, setPagination ] = useState({
+        current: 1,
+        pageSize: 10,
+        total: 0
+    });
 
     useEffect( () => {
         fetchData();
-    }, [] );
+    }, [pagination.current, pagination.pageSize] );
 
     const fetchData = () => {
         setLoading(true);
-        api.getInventory().then( data => {
-            setProducts(data);
+        api.getInventory({ page: pagination.current, per_page: pagination.pageSize }).then( data => {
+            // Check if data is array (old) or object (new)
+            if ( Array.isArray(data) ) {
+                 setProducts(data);
+                 setPagination(prev => ({ ...prev, total: data.length }));
+            } else {
+                 setProducts(data.items);
+                 setPagination(prev => ({ 
+                     ...prev, 
+                     total: data.total 
+                 }));
+            }
             setLoading(false);
             setEdited({});
         });
+    };
+
+    const handleTableChange = ( newPagination ) => {
+        setPagination( prev => ({
+            ...prev,
+            current: newPagination.current,
+            pageSize: newPagination.pageSize
+        }));
     };
 
     const handleChange = ( id, field, value ) => {
@@ -36,8 +63,6 @@ const InventoryManager = () => {
             { id, ...edited[id] }
         ]);
 
-        // Optimistic update or refresh
-        // For simplicity, let's refresh local state effectively
         const updatedProducts = products.map( p => {
             if ( p.id === id ) {
                 return { ...p, ...edited[id] };
@@ -46,11 +71,10 @@ const InventoryManager = () => {
         });
         setProducts(updatedProducts);
 
-        // Clear edits for this ID
         const newEdited = { ...edited };
         delete newEdited[id];
         setEdited(newEdited);
-        alert('Product saved!');
+        message.success('Product saved!');
     };
 
     const saveAll = async () => {
@@ -62,95 +86,126 @@ const InventoryManager = () => {
         if ( updates.length === 0 ) return;
 
         await api.updateInventory(updates);
-        fetchData(); // Refresh all
-        alert('All changes saved!');
+        fetchData();
+        message.success('All changes saved!');
     };
 
-    if ( loading ) return <div>Loading Inventory...</div>;
-
-    const styles = {
-        table: { width: '100%', borderCollapse: 'collapse', background: '#fff', borderRadius: '8px', overflow: 'hidden' },
-        th: { padding: '12px', textAlign: 'left', background: '#f9fafb', borderBottom: '1px solid #e5e7eb' },
-        td: { padding: '12px', borderBottom: '1px solid #e5e7eb' },
-        input: { padding: '6px', border: '1px solid #ccc', borderRadius: '4px', width: '80px' },
-        saveBtn: { background: '#2271b1', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', marginLeft: '10px' },
-        batchBtn: { position: 'fixed', bottom: '20px', right: '20px', background: '#2271b1', color: '#fff', padding: '15px 30px', borderRadius: '50px', boxShadow: '0 4px 12px rgba(0,0,0,0.2)', border: 'none', cursor: 'pointer', fontSize: '16px' }
-    };
+    const columns = [
+        {
+            title: 'Product',
+            dataIndex: 'name',
+            key: 'name',
+            render: (text, record) => (
+                <Space>
+                    <Avatar shape="square" src={record.image} />
+                    {text}
+                </Space>
+            )
+        },
+        {
+            title: 'SKU',
+            dataIndex: 'sku',
+            key: 'sku',
+        },
+        {
+            title: 'Stock',
+            dataIndex: 'stock',
+            key: 'stock',
+            render: (text, record) => {
+                const val = edited[record.id]?.stock !== undefined ? edited[record.id].stock : text;
+                return (
+                    <Input 
+                        type="number" 
+                        value={val} 
+                        onChange={e => handleChange(record.id, 'stock', e.target.value)} 
+                        style={{ width: 80 }} 
+                    />
+                );
+            }
+        },
+        {
+            title: 'Price ($)',
+            dataIndex: 'price',
+            key: 'price',
+            render: (text, record) => {
+                const val = edited[record.id]?.price !== undefined ? edited[record.id].price : text;
+                return (
+                    <Input 
+                        type="number" 
+                        value={val} 
+                        onChange={e => handleChange(record.id, 'price', e.target.value)} 
+                        style={{ width: 90 }} 
+                    />
+                );
+            }
+        },
+        {
+            title: 'Cost (COG)',
+            dataIndex: 'wc_cog_cost',
+            key: 'wc_cog_cost',
+            render: (text, record) => {
+                const val = edited[record.id]?.wc_cog_cost !== undefined ? edited[record.id].wc_cog_cost : (text || '');
+                return (
+                    <Input 
+                        type="number" 
+                        value={val} 
+                        onChange={e => handleChange(record.id, 'wc_cog_cost', e.target.value)} 
+                        style={{ width: 90 }} 
+                    />
+                );
+            }
+        },
+        {
+            title: 'Cost (Op)',
+            dataIndex: 'op_cost',
+            key: 'op_cost',
+            render: (text, record) => {
+                const val = edited[record.id]?.op_cost !== undefined ? edited[record.id].op_cost : (text || '');
+                return (
+                    <Input 
+                        type="number" 
+                        value={val} 
+                        onChange={e => handleChange(record.id, 'op_cost', e.target.value)} 
+                        style={{ width: 90 }} 
+                    />
+                );
+            }
+        },
+        {
+            title: 'Actions',
+            key: 'actions',
+            render: (_, record) => edited[record.id] ? (
+                <Button type="primary" icon={<SaveOutlined />} onClick={() => saveRow(record.id)}>
+                    Save
+                </Button>
+            ) : null
+        }
+    ];
 
     return (
         <div>
-            <h1 style={{ marginBottom: '20px' }}>Inventory Manager</h1>
-            <table style={styles.table}>
-                <thead>
-                    <tr>
-                        <th style={styles.th}>Product</th>
-                        <th style={styles.th}>SKU</th>
-                        <th style={styles.th}>Stock</th>
-                        <th style={styles.th}>Price</th>
-                        <th style={styles.th}>Cost (COG)</th>
-                        <th style={styles.th}>Cost (Op)</th>
-                        <th style={styles.th}>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    { products.map( p => {
-                        const edits = edited[p.id] || {};
-                        return (
-                            <tr key={p.id}>
-                                <td style={styles.td}>
-                                    <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
-                                        { p.image && <img src={p.image} style={{width:'40px', height:'40px', objectFit:'cover', borderRadius:'4px'}} /> }
-                                        {p.name}
-                                    </div>
-                                </td>
-                                <td style={styles.td}>{p.sku}</td>
-                                <td style={styles.td}>
-                                    <input
-                                        type="number"
-                                        style={styles.input}
-                                        value={ edits.stock !== undefined ? edits.stock : p.stock }
-                                        onChange={(e) => handleChange(p.id, 'stock', e.target.value)}
-                                    />
-                                </td>
-                                <td style={styles.td}>
-                                    <input
-                                        type="number"
-                                        style={styles.input}
-                                        value={ edits.price !== undefined ? edits.price : p.price }
-                                        onChange={(e) => handleChange(p.id, 'price', e.target.value)}
-                                    />
-                                </td>
-                                <td style={styles.td}>
-                                    <input
-                                        type="number"
-                                        style={styles.input}
-                                        value={ edits.wc_cog_cost !== undefined ? edits.wc_cog_cost : (p.wc_cog_cost || '') }
-                                        onChange={(e) => handleChange(p.id, 'wc_cog_cost', e.target.value)}
-                                    />
-                                </td>
-                                <td style={styles.td}>
-                                    <input
-                                        type="number"
-                                        style={styles.input}
-                                        value={ edits.op_cost !== undefined ? edits.op_cost : (p.op_cost || '') }
-                                        onChange={(e) => handleChange(p.id, 'op_cost', e.target.value)}
-                                    />
-                                </td>
-                                <td style={styles.td}>
-                                    { edited[p.id] && (
-                                        <button style={styles.saveBtn} onClick={() => saveRow(p.id)}>Save</button>
-                                    )}
-                                </td>
-                            </tr>
-                        );
-                    })}
-                </tbody>
-            </table>
-
+            <Title level={2}>Inventory Manager</Title>
+            <Table 
+                columns={columns} 
+                dataSource={products} 
+                rowKey="id" 
+                loading={loading} 
+                pagination={{ 
+                    current: pagination.current, 
+                    pageSize: pagination.pageSize, 
+                    total: pagination.total,
+                    showSizeChanger: true
+                }}
+                onChange={handleTableChange}
+                scroll={{ x: 1000 }}
+                style={{ background: '#fff', borderRadius: 8 }}
+            />
             { Object.keys(edited).length > 0 && (
-                <button style={styles.batchBtn} onClick={saveAll}>
-                    Save All ({Object.keys(edited).length}) Changes
-                </button>
+                 <div style={{ position: 'fixed', bottom: 30, right: 30, zIndex: 100 }}>
+                    <Button type="primary" size="large" onClick={saveAll} style={{boxShadow: '0 4px 12px rgba(0,0,0,0.15)', borderRadius: 30, height: 50, padding: '0 30px'}}>
+                        Save All ({Object.keys(edited).length})
+                    </Button>
+                 </div>
             )}
         </div>
     );

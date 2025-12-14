@@ -22,21 +22,28 @@ if ( ! defined( 'ABSPATH' ) ) {
     </style>
 
 	<?php
-    // 1. Get the asset file for dependencies and versioning
-    $asset_file = include( CMD_PATH . 'build/index.asset.php' );
+    $js_file  = CMD_PATH . 'build/index.js';
+    $css_file = CMD_PATH . 'build/index.css';
+    $version  = file_exists( $js_file ) ? filemtime( $js_file ) : '1.0.0';
 
-    // 2. Register our script with WordPress so it handles dependencies (react, wp-element, etc.)
-    // Note: We need to register it here because we are outside the standard 'admin_enqueue_scripts' hook flow
-    // or we need to ensure the global WP scripts are available.
-
-    // Enqueue our app
+    // Enqueue our app script - bundled with React & Antd
     wp_enqueue_script(
         'cmd-app',
         CMD_URL . 'build/index.js',
-        $asset_file['dependencies'],
-        $asset_file['version'],
+        array(), // No external dependencies (Bundled)
+        $version,
         true
     );
+
+    // Enqueue our app styles
+    if ( file_exists( $css_file ) ) {
+        wp_enqueue_style(
+            'cmd-app-style',
+            CMD_URL . 'build/index.css',
+            array(),
+            $version
+        );
+    }
 
     // 3. Localize script for settings
     wp_localize_script(
@@ -45,16 +52,16 @@ if ( ! defined( 'ABSPATH' ) ) {
         array(
             'root' => esc_url_raw( rest_url() ),
             'nonce' => wp_create_nonce( 'wp_rest' ),
-            'adminUrl' => admin_url()
+            'adminUrl' => admin_url(),
+            'siteLogo' => get_site_icon_url( 32 ) // fallback to site icon or custom logic if needed
         )
     );
 
-    // 4. Print all enqueued scripts (including dependencies like wp-element)
-    // This will output <script> tags for React, wp-data, etc.
+    // 4. Print all enqueued scripts and styles
     wp_print_scripts( 'cmd-app' );
-
-    // Also print styles if needed (wp-components styles etc)
-    wp_print_styles( 'wp-components' );
+    if ( file_exists( $css_file ) ) {
+        wp_print_styles( 'cmd-app-style' );
+    }
 	?>
 </head>
 <body>

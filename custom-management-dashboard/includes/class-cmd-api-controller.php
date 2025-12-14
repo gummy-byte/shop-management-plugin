@@ -66,20 +66,72 @@ class CMD_API_Controller extends WP_REST_Controller {
 	 * Returns: Sales (Today), Active Members, Low Stock Count
 	 */
 	public function get_stats( $request ) {
-		// Mock Data / Real Logic placeholders
+		// 1. Sales This Month
+		// Defaulting to "this month" to ensure data visibility during testing
+		$args = array(
+			// 'date_created' => date( 'Y-m-d' ) . '...', // Old "Today" logic
+            'date_created' => date('Y-m-01') . '...', // From 1st of current month to now
+			'status'       => array( 'wc-completed', 'wc-processing', 'wc-on-hold' ),
+			'limit'        => -1,
+		);
+		$orders = wc_get_orders( $args );
+		
+		$sales_today = 0;
+		$sales_count = count( $orders );
+		
+		foreach ( $orders as $order ) {
+			$sales_today += $order->get_total();
+		}
 
-		// 1. Sales Today
-		// Real logic: Use wc_get_orders with date_created parameters
-		$sales_today = 1250.50;
-		$sales_count = 15;
-
-		// 2. Active Members
-		// Real logic: Count users with active membership capability or YITH table query
-		$active_members = 45;
+		// 2. Active Members (YITH Membership)
+		$active_members = 0;
+		if ( function_exists( 'yith_get_all_counts' ) ) {
+            // Tentative: Check if helper exists, otherwise use standard post query
+            // Using a direct count of 'wc_user_membership' posts with status 'active'
+            $query_args = array(
+                'post_type'   => 'wc_user_membership',
+                'post_status' => 'wcm-active',
+                'fields'      => 'ids',
+                'posts_per_page' => -1
+            );
+            $query = new WP_Query( $query_args );
+            $active_members = $query->found_posts;
+		}
 
 		// 3. Low Stock
-		// Real logic: Query products where stock_status = 'low_stock' or quantity < threshold
-		$low_stock_count = 3;
+        // Query products where (stock_status = 'lowstock') OR (manage_stock = 'yes' AND stock_quantity <= threshold)
+        // Note: WC usually syncs _stock_status, but we can be extra checking.
+        // For simplicity and speed in this prototype, we'll check _stock_status = 'lowstock' AND also products with low quantity manually if needed.
+        // But the safest standard WC way is trusting _stock_status OR _stock <= 5 (default low stock threshold)
+        
+		$low_stock_query = new WP_Query( array(
+            'post_type'      => 'product',
+            'posts_per_page' => -1,
+            'fields'         => 'ids',
+            'meta_query'     => array(
+                'relation' => 'OR',
+                array(
+                    'key'     => '_stock_status',
+                    'value'   => 'lowstock',
+                    'compare' => '='
+                ),
+                array(
+                    'relation' => 'AND',
+                    array(
+                        'key'     => '_manage_stock',
+                        'value'   => 'yes',
+                        'compare' => '='
+                    ),
+                    array(
+                        'key'     => '_stock',
+                        'value'   => 5, // Access global option 'woocommerce_notify_low_stock_amount' in production
+                        'compare' => '<=',
+                        'type'    => 'NUMERIC'
+                    )
+                )
+            )
+        ) );
+		$low_stock_count = $low_stock_query->found_posts;
 
 		return new WP_REST_Response( array(
 			'sales_today' => $sales_today,
@@ -94,28 +146,47 @@ class CMD_API_Controller extends WP_REST_Controller {
 	 * Returns: List of products with Cost Data
 	 */
 	public function get_inventory( $request ) {
+		$page     = (int) $request->get_param( 'page' );
+		$per_page = (int) $request->get_param( 'per_page' );
+
+		if ( ! $page ) {
+			$page = 1;
+		}
+		if ( ! $per_page ) {
+			$per_page = 10;
+		}
+
 		$args = array(
-			'status' => 'publish',
-			'limit' => 50, // Pagination should be implemented in production
+			'status'   => 'publish',
+			'limit'    => $per_page,
+			'page'     => $page,
+			'paginate' => true,
 		);
-		$products = wc_get_products( $args );
+
+		$results  = wc_get_products( $args );
+		$products = $results->products;
+		$total    = $results->total;
+
 		$data = array();
 
 		foreach ( $products as $product ) {
 			$data[] = array(
-				'id' => $product->get_id(),
-				'name' => $product->get_name(),
-				'sku' => $product->get_sku(),
-				'price' => $product->get_regular_price(),
-				'stock' => $product->get_stock_quantity(),
+				'id'          => $product->get_id(),
+				'name'        => $product->get_name(),
+				'sku'         => $product->get_sku(),
+				'price'       => $product->get_regular_price(),
+				'stock'       => $product->get_stock_quantity(),
 				// Custom Cost Fields
 				'wc_cog_cost' => $product->get_meta( 'wc_cog_cost' ),
-				'op_cost' => $product->get_meta( 'op_cost' ),
-				'image' => wp_get_attachment_image_url( $product->get_image_id(), 'thumbnail' )
+				'op_cost'     => $product->get_meta( 'op_cost' ),
+				'image'       => wp_get_attachment_image_url( $product->get_image_id(), 'thumbnail' )
 			);
 		}
 
-		return new WP_REST_Response( $data, 200 );
+		return new WP_REST_Response( array(
+			'items' => $data,
+			'total' => $total,
+		), 200 );
 	}
 
 	/**
@@ -157,13 +228,31 @@ class CMD_API_Controller extends WP_REST_Controller {
 	 * Returns active YITH members.
 	 */
 	public function get_members( $request ) {
-		// Mock logic for YITH Membership
-		// In production: $members = YITH_WC_Memberships_Manager::get_members_by_plan( ... );
+        $members = array();
+        
+        $args = array(
+            'post_type'      => 'wc_user_membership',
+            'post_status'    => array( 'wcm-active' ),
+            'posts_per_page' => 50, // Limit for now
+        );
 
-		$members = array(
-			array( 'id' => 1, 'name' => 'John Doe', 'plan' => 'Gold', 'expires' => '2023-12-31' ),
-			array( 'id' => 2, 'name' => 'Jane Smith', 'plan' => 'Silver', 'expires' => '2023-11-15' ),
-		);
+        $memberships = get_posts( $args );
+
+        foreach ( $memberships as $post ) {
+            $membership = wc_memberships_get_user_membership( $post->ID );
+            if ( $membership ) {
+                $user = $membership->get_user();
+                $plan = $membership->get_plan();
+                
+                $members[] = array(
+                    'id'      => $membership->get_id(),
+                    'user_id' => $user ? $user->ID : 0,
+                    'name'    => $user ? $user->display_name : 'Unknown',
+                    'plan'    => $plan ? $plan->get_name() : 'Unknown Plan',
+                    'expires' => $membership->get_end_date() ? $membership->get_end_date( 'Y-m-d' ) : 'Never',
+                );
+            }
+        }
 
 		return new WP_REST_Response( $members, 200 );
 	}
@@ -173,12 +262,28 @@ class CMD_API_Controller extends WP_REST_Controller {
 	 * Returns recent orders with calculated profit.
 	 */
 	public function get_orders( $request ) {
+		$page     = (int) $request->get_param( 'page' );
+		$per_page = (int) $request->get_param( 'per_page' );
+
+		if ( ! $page ) {
+			$page = 1;
+		}
+		if ( ! $per_page ) {
+			$per_page = 10;
+		}
+
 		$args = array(
-			'limit' => 20,
-			'orderby' => 'date',
-			'order' => 'DESC',
+			'limit'    => $per_page,
+			'page'     => $page,
+			'orderby'  => 'date',
+			'order'    => 'DESC',
+			'paginate' => true,
 		);
-		$orders = wc_get_orders( $args );
+		
+		$results = wc_get_orders( $args );
+		$orders  = $results->orders;
+		$total   = $results->total;
+
 		$data = array();
 
 		foreach ( $orders as $order ) {
@@ -188,26 +293,31 @@ class CMD_API_Controller extends WP_REST_Controller {
 				$product = $item->get_product();
 				if ( $product ) {
 					$cost = (float) $product->get_meta( 'wc_cog_cost' );
-					if ( ! $cost ) $cost = (float) $product->get_meta( 'op_cost' );
+					if ( ! $cost ) {
+						$cost = (float) $product->get_meta( 'op_cost' );
+					}
 					$total_cost += $cost * $item->get_quantity();
 				}
 			}
 
-			$total = (float) $order->get_total();
-			$profit = $total - $total_cost;
+			$total_order = (float) $order->get_total();
+			$profit      = $total_order - $total_cost;
 
 			$data[] = array(
-				'id' => $order->get_id(),
-				'number' => $order->get_order_number(),
-				'date' => $order->get_date_created()->date( 'Y-m-d H:i' ),
+				'id'       => $order->get_id(),
+				'number'   => $order->get_order_number(),
+				'date'     => $order->get_date_created()->date( 'Y-m-d H:i' ),
 				'customer' => $order->get_formatted_billing_full_name(),
-				'total' => $total,
-				'profit' => $profit,
-				'status' => $order->get_status()
+				'total'    => $total_order,
+				'profit'   => $profit,
+				'status'   => $order->get_status()
 			);
 		}
 
-		return new WP_REST_Response( $data, 200 );
+		return new WP_REST_Response( array(
+			'items' => $data,
+			'total' => $total,
+		), 200 );
 	}
 
 	/**
@@ -216,13 +326,24 @@ class CMD_API_Controller extends WP_REST_Controller {
 	 */
 	public function get_invoice_url( $request ) {
 		$order_id = $request['id'];
+        $pdf_url = '';
 
-		// Logic for YITH WooCommerce PDF Invoice
-		// Typically: yith_ywpi_get_invoice_url( $order_id );
-		// Or constructing the URL manually if the helper doesn't exist in global scope
+		// YITH WooCommerce PDF Invoice
+        if ( function_exists( 'yith_ywpi_get_invoice_url' ) ) {
+             $pdf_url = yith_ywpi_get_invoice_url( $order_id );
+        } elseif ( function_exists( 'YITH_YWPI_Invoice' ) ) {
+             // Fallback class based approach if function helper is missing
+             $invoice = YITH_YWPI_Invoice()->get_invoice_by_order_id( $order_id );
+             if ( $invoice ) {
+                 $pdf_url = $invoice->get_url();
+             }
+        }
 
-		// Mock URL
-		$pdf_url = admin_url( 'admin-ajax.php?action=yith_ywpi_generate_invoice&order_id=' . $order_id );
+        // If plugin not active or failed, return empty or default
+        if ( empty( $pdf_url ) ) {
+             // Fallback to admin-ajax just in case, but warn
+             $pdf_url = '#'; 
+        }
 
 		return new WP_REST_Response( array( 'url' => $pdf_url ), 200 );
 	}

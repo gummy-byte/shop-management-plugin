@@ -16,9 +16,10 @@
   "author": "Jules",
   "license": "GPL-2.0-or-later",
   "dependencies": {
-    "@wordpress/element": "^5.0.0",
-    "@wordpress/components": "^23.0.0",
     "@wordpress/api-fetch": "^6.0.0",
+    "@wordpress/components": "^23.0.0",
+    "@wordpress/element": "^5.0.0",
+    "antd": "^6.1.0",
     "react": "^18.0.0",
     "react-dom": "^18.0.0",
     "react-router-dom": "^6.0.0"

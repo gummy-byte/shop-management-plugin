@@ -30,12 +30,18 @@ export const apiFetch = async ( endpoint, options = {} ) => {
 
 export default {
     getStats: () => apiFetch( '/dashboard-stats' ),
-    getInventory: () => apiFetch( '/inventory' ),
+    getInventory: ( params = {} ) => {
+        const query = new URLSearchParams( params ).toString();
+        return apiFetch( `/inventory?${query}` );
+    },
     updateInventory: ( updates ) => apiFetch( '/inventory/update', {
         method: 'POST',
         body: JSON.stringify({ updates })
     }),
-    getOrders: () => apiFetch( '/orders' ),
+    getOrders: ( params = {} ) => {
+        const query = new URLSearchParams( params ).toString();
+        return apiFetch( `/orders?${query}` );
+    },
     getInvoiceUrl: ( id ) => apiFetch( `/orders/${id}/invoice` ),
     getMembers: () => apiFetch( '/members' ),
 };

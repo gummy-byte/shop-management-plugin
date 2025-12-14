@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import { Row, Col, Card, Statistic, Alert, Spin } from 'antd';
+import { DollarOutlined, UserOutlined, WarningOutlined, ShoppingCartOutlined } from '@ant-design/icons';
 import api from '../utils/api';
 
 const CommandCenter = () => {
@@ -12,33 +14,50 @@ const CommandCenter = () => {
         });
     }, [] );
 
-    if ( loading ) return <div>Loading Command Center...</div>;
-
-    const styles = {
-        grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px' },
-        card: { background: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' },
-        title: { margin: '0 0 10px 0', fontSize: '14px', color: '#666', textTransform: 'uppercase' },
-        value: { fontSize: '28px', fontWeight: 'bold', margin: 0, color: '#333' }
-    };
+    if ( loading ) return <div style={{textAlign:'center', marginTop: 50}}><Spin size="large" tip="Loading Command Center..." /></div>;
 
     return (
         <div>
-            <h1 style={{ marginBottom: '20px' }}>Command Center</h1>
-            <div style={styles.grid}>
-                <div style={styles.card}>
-                    <h3 style={styles.title}>Today's Sales</h3>
-                    <p style={styles.value}>${stats.sales_today}</p>
-                    <small>{stats.sales_count} orders</small>
-                </div>
-                <div style={styles.card}>
-                    <h3 style={styles.title}>Active Members</h3>
-                    <p style={styles.value}>{stats.active_members}</p>
-                </div>
-                <div style={styles.card}>
-                    <h3 style={styles.title}>Low Stock Alerts</h3>
-                    <p style={styles.value} style={{...styles.value, color: '#dc3545'}}>{stats.low_stock_count}</p>
-                </div>
-            </div>
+            <h2 style={{ marginBottom: '24px' }}>Command Center</h2>
+            <Row gutter={[16, 16]}>
+                <Col xs={24} sm={12} md={8}>
+                    <Card bordered={false}>
+                        <Statistic 
+                            title="Sales (This Month)" 
+                            value={stats.sales_today} 
+                            precision={2} 
+                            prefix={<DollarOutlined />} 
+                        />
+                        <div style={{ marginTop: 8, color: '#888' }}>
+                            <ShoppingCartOutlined /> {stats.sales_count} orders
+                        </div>
+                    </Card>
+                </Col>
+                <Col xs={24} sm={12} md={8}>
+                    <Card bordered={false}>
+                        <Statistic 
+                            title="Active Members" 
+                            value={stats.active_members} 
+                            prefix={<UserOutlined />} 
+                        />
+                    </Card>
+                </Col>
+                <Col xs={24} sm={12} md={8}>
+                    <Card bordered={false}>
+                        <Statistic 
+                            title="Low Stock Alerts" 
+                            value={stats.low_stock_count} 
+                            valueStyle={{ color: stats.low_stock_count > 0 ? '#cf1322' : '#3f8600' }}
+                            prefix={<WarningOutlined />} 
+                        />
+                        { stats.low_stock_count > 0 && (
+                            <div style={{ marginTop: 10 }}>
+                                <Alert message="Action Needed" type="error" showIcon small />
+                            </div>
+                        )}
+                    </Card>
+                </Col>
+            </Row>
         </div>
     );
 };

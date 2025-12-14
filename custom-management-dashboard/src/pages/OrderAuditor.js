@@ -1,78 +1,119 @@
 import React, { useEffect, useState } from 'react';
+import { Table, Button, Tag, Typography, message, Space } from 'antd';
+import { DownloadOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import api from '../utils/api';
+
+const { Title, Text } = Typography;
 
 const OrderAuditor = () => {
     const [ orders, setOrders ] = useState([]);
     const [ loading, setLoading ] = useState(true);
+    const [ pagination, setPagination ] = useState({
+        current: 1,
+        pageSize: 10,
+        total: 0
+    });
 
     useEffect( () => {
-        api.getOrders().then( data => {
-            setOrders(data);
+        fetchData();
+    }, [pagination.current, pagination.pageSize] );
+    
+    const fetchData = () => {
+        setLoading(true);
+        api.getOrders({ page: pagination.current, per_page: pagination.pageSize }).then( data => {
+             // Check if data is array (old) or object (new)
+            if ( Array.isArray(data) ) {
+                 setOrders(data);
+                 setPagination(prev => ({ ...prev, total: data.length }));
+            } else {
+                 setOrders(data.items);
+                 setPagination(prev => ({ 
+                     ...prev, 
+                     total: data.total 
+                 }));
+            }
             setLoading(false);
         });
-    }, [] );
+    };
+
+    const handleTableChange = ( newPagination ) => {
+        setPagination( prev => ({
+            ...prev,
+            current: newPagination.current,
+            pageSize: newPagination.pageSize
+        }));
+    };
 
     const handleDownloadInvoice = async ( id ) => {
         try {
             const data = await api.getInvoiceUrl(id);
-            if ( data.url ) {
+            if ( data.url && data.url !== '#' ) {
                 window.open( data.url, '_blank' );
             } else {
-                alert('Invoice URL not found.');
+                message.error('Invoice URL not found or generation failed.');
             }
         } catch ( err ) {
-            alert('Failed to get invoice: ' + err.message);
+            message.error('Failed to get invoice: ' + err.message);
         }
     };
 
-    if ( loading ) return <div>Loading Orders...</div>;
-
-    const styles = {
-        table: { width: '100%', borderCollapse: 'collapse', background: '#fff', borderRadius: '8px', overflow: 'hidden' },
-        th: { padding: '12px', textAlign: 'left', background: '#f9fafb', borderBottom: '1px solid #e5e7eb' },
-        td: { padding: '12px', borderBottom: '1px solid #e5e7eb' },
-        btn: { background: '#fff', border: '1px solid #ccc', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', marginRight: '5px' },
-        profit: { color: 'green', fontWeight: 'bold' }
-    };
+    const columns = [
+        { title: 'Order #', dataIndex: 'number', key: 'number', render: text => <b>#{text}</b> },
+        { title: 'Date', dataIndex: 'date', key: 'date' },
+        { title: 'Customer', dataIndex: 'customer', key: 'customer' },
+        { 
+            title: 'Status', 
+            dataIndex: 'status', 
+            key: 'status',
+            render: status => {
+                let color = 'default';
+                if ( status === 'completed' ) color = 'success';
+                if ( status === 'processing' ) color = 'processing';
+                if ( status === 'cancelled' ) color = 'error';
+                return <Tag color={color}>{status.toUpperCase()}</Tag>;
+            }
+        },
+        { title: 'Total', dataIndex: 'total', key: 'total', render: val => `$${val.toFixed(2)}` },
+        { 
+            title: 'Profit (Est.)', 
+            dataIndex: 'profit', 
+            key: 'profit', 
+            render: val => <Text type="success" strong>${val.toFixed(2)}</Text>
+        },
+        {
+            title: 'Actions',
+            key: 'actions',
+            render: (_, record) => (
+                <Space>
+                    <Button icon={<DownloadOutlined />} size="small" onClick={() => handleDownloadInvoice(record.id)}>
+                        Invoice
+                    </Button>
+                    <Button icon={<InfoCircleOutlined />} size="small" onClick={() => message.info('Cost derived from product meta (wc_cog_cost/op_cost).')}>
+                        Cost
+                    </Button>
+                </Space>
+            )
+        }
+    ];
 
     return (
         <div>
-            <h1 style={{ marginBottom: '20px' }}>Order Auditor</h1>
-            <table style={styles.table}>
-                <thead>
-                    <tr>
-                        <th style={styles.th}>Order #</th>
-                        <th style={styles.th}>Date</th>
-                        <th style={styles.th}>Customer</th>
-                        <th style={styles.th}>Status</th>
-                        <th style={styles.th}>Total</th>
-                        <th style={styles.th}>Profit (Est.)</th>
-                        <th style={styles.th}>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    { orders.map( order => (
-                        <tr key={order.id}>
-                            <td style={styles.td}>#{order.number}</td>
-                            <td style={styles.td}>{order.date}</td>
-                            <td style={styles.td}>{order.customer}</td>
-                            <td style={styles.td}>{order.status}</td>
-                            <td style={styles.td}>${order.total}</td>
-                            <td style={styles.td}>
-                                <span style={styles.profit}>${order.profit.toFixed(2)}</span>
-                            </td>
-                            <td style={styles.td}>
-                                <button style={styles.btn} onClick={() => handleDownloadInvoice(order.id)}>
-                                    Download Invoice
-                                </button>
-                                <button style={styles.btn} onClick={() => alert('Breakdown details: Cost data is derived from product meta (wc_cog_cost/op_cost).')}>
-                                    Cost Breakdown
-                                </button>
-                            </td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
+            <Title level={2}>Order Auditor</Title>
+            <Table 
+                columns={columns} 
+                dataSource={orders} 
+                rowKey="id" 
+                loading={loading}
+                pagination={{ 
+                    current: pagination.current, 
+                    pageSize: pagination.pageSize, 
+                    total: pagination.total,
+                    showSizeChanger: true
+                }}
+                onChange={handleTableChange}
+                scroll={{ x: 800 }}
+                style={{ background: '#fff', borderRadius: 8 }}
+            />
         </div>
     );
 };
