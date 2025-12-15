@@ -1,4 +1,4 @@
-# Pending Tasks
+not# Pending Tasks
 
 ## 1. Inventory Management Extensions
 
@@ -12,9 +12,9 @@
   - [ ] Create API Endpoint: `GET /cmd/v1/products/{id}`
   - [ ] Create API Endpoint: `POST /cmd/v1/products/{id}`
 - [ ] **Inventory List Enhancements**
-  - [ ] Implement Column Visibility Toggle (React state/component)
+  - [x] Implement Column Visibility Toggle (React state/component) ✅
   - [ ] Integrate "Stock Status" and "Category" filters into the API query logic
-  - [ ] Implement Export to CSV functionality (Frontend generated or Backend endpoint)
+  - [x] Implement Export to CSV functionality with filters (Frontend + Backend) ✅
 
 ## 2. Order Management Extensions
 

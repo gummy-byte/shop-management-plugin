@@ -38,6 +38,10 @@ export default {
         method: 'POST',
         body: JSON.stringify({ updates })
     }),
+    createProduct: ( productData ) => apiFetch( '/products', {
+        method: 'POST',
+        body: JSON.stringify( productData )
+    }),
     getOrders: ( params = {} ) => {
         const query = new URLSearchParams( params ).toString();
         return apiFetch( `/orders?${query}` );
